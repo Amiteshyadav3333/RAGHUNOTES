@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Transcripción de Notas con IA</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Socket.IO Client -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body {
+            background-color: #f5f0f3;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .container {
+            max-width: 1200px;
+        }
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        .card-header {
+            background-color: #fff;
+            border-bottom: 1px solid #e9ecef;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+        }
+        .note-entry {
+            background: #ffffff;
+            border-left: 4px solid #0d6efd;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease;
+        }
+        .note-entry:hover {
+            transform: translateY(-2px);
+        }
+        .speaker-badge {
+            font-weight: 600;
+            color: #0d6efd;
+        }
+        .timestamp {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+        .spinner-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            z-index: 1060; /* Higher than modal */
+            justify-content: center;
+            align-items: center;
+        }
+        #player-container {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            height: 0;
+            overflow: hidden;
+            max-width: 100%;
+            background: #000;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        #player {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .btn-listen {
+            width: 150px;
+        }
+        .modal-body {
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Spinner Overlay for YouTube Transcription -->
+    <div id="spinner" class="spinner-container">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+            <span class="visually-hidden">Procesando...</span>
+        </div>
+        <p class="ms-3 mb-0 fs-5">Transcription in progress ......</p>
+    </div>
+
+    <div class="container my-5">
+        <div class="text-center mb-5">
+            <h1 class="display-5 fw-bold">Raghu Note</h1>
+            <p class="lead text-muted">YouTube video converts to Note in structure.</p>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-youtube text-danger"></i> Paso 1: URL de YouTube videos </h5>
+                <div class="input-group">
+                    <input type="text" id="videoUrl" class="form-control form-control-lg" placeholder="Paste any video or social URL (YouTube, Instagram, Facebook, etc.) here..." />
+                    <small class="form-text text-muted">Supported: YouTube, Instagram, Facebook, Twitter, Vimeo, and more!</small>
+                    <button id="transcribeBtn" class="btn btn-primary btn-lg">Transcribir botton</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Columna Izquierda: Reproductor y Controles -->
+            <div class="col-lg-7">
+                <div class="card">
+                    <div class="card-body">
+                        <div id="player-container" class="mb-4">
+                            <div id="player"></div>
+                            <div id="video-loading" class="position-absolute top-50 start-50 translate-middle text-center" style="display: none; z-index: 10;">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading video...</span>
+                                </div>
+                                <p class="mt-2 text-white bg-dark bg-opacity-75 px-3 py-2 rounded">Loading video...</p>
+                            </div>
+                        </div>
+                        
+                        <h5 class="card-title"><i class="bi bi-mic-fill text-success"></i> speaker 2: Discribe the notes on your language</h5>
+                        <div class="mb-3">
+                            <label for="speakerSelect" class="form-label">speakerSelect:</label>
+                            <select id="speakerSelect" class="form-select">
+                                <option>Speaker 1</option>
+                                <option>Speaker 2</option>
+                                <option>Speaker 3</option>
+                                <option value="custom">modal-dialog (especificar)</option>
+                            </select>
+                        </div>
+                        <div class="d-flex gap-2 mb-3">
+                             <button class="btn btn-success btn-listen" id="startBtn"><i class="bi bi-mic"></i> ON</button>
+                             <button class="btn btn-danger btn-listen" id="stopBtn" disabled><i class="bi bi-stop-fill"></i> OFF</button>
+                        </div>
+
+                        <textarea id="noteText" class="form-control mb-2" rows="3" placeholder="manualy notes write down"></textarea>
+                        <button id="addNoteBtn" class="btn btn-outline-primary"> Amitesh Note Manual</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Columna Derecha: Notas -->
+            <div class="col-lg-5">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0"><i class="bi bi-card-text"></i> Notas Generaters</h5>
+                        <div class="btn-group">
+                            <button id="downloadTxtBtn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-file-earmark-text"></i> TXT</button>
+                            <button id="downloadPdfBtn" class="btn btn-sm btn-outline-primary"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="pdfFilename" class="form-label small">Nombre PDF:</label>
+                                <input type="text" class="form-control form-control-sm" id="pdfFilename" placeholder="notas_bilingues.pdf" value="notas_bilingues.pdf">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="txtFilename" class="form-label small">Nombre TXT:</label>
+                                <input type="text" class="form-control form-control-sm" id="txtFilename" placeholder="notas.txt" value="notas.txt">
+                            </div>
+                        </div>
+                        <div id="notesContainer" style="max-height: 350px; overflow-y: auto;">
+                            <p class="text-muted text-center" id="no-notes-msg"> Hay your notas here. Transcribe notes here ths place which are use now 🤩.</p>
+                        </div>
+                    </div>
+                     <div class="card-footer bg-white pt-3">
+                        <div class="d-flex justify-content-start flex-wrap gap-2">
+                             <span class="text-muted small align-self-center">Action AI:</span>
+                            <button id="summarizeBtn" class="btn btn-sm btn-outline-info">✨ Resum now</button>
+                            <button id="actionsBtn" class="btn btn-sm btn-outline-info">✨ Exct Actions now</button>
+                            <button id="titleBtn" class="btn btn-sm btn-outline-info">✨ Sumrise title now</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- AI Result Modal -->
+    <div class="modal fade" id="aiResultModal" tabindex="-1" aria-labelledby="aiResultModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="aiResultModalLabel">✨ Resultado de la IA</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="aiResultBody">
+            <!-- AI content will be injected here -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- YouTube IFrame API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <!-- Script Personalizado -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
