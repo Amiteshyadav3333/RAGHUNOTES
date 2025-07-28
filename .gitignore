@@ -1,0 +1,10 @@
+.venv/
+py10env/
+whisperenv/
+__pycache__/
+downloads/
+recordings/
+notas_bilingues.pdf
+*.pyc
+.vscode/
+.DS_Store
