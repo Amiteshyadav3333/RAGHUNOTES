@@ -75,3 +75,4 @@ urllib3==2.4.0
 websockets==10.0
 Werkzeug==2.0.1
 wsproto==1.2.0
+flask
